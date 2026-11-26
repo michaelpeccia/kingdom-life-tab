@@ -226,7 +226,7 @@ fs.writeFileSync(path.join(OUT, 'legacy/legacy-css.js'),
 const ver = (html.match(/styles\.css\?v=([\w]+)/) || [, 'tab'])[1];
 html = html.replace(/<link rel="stylesheet" href="styles\.css[^"]*">/,
   `<script>window.__KL_VER=${JSON.stringify(ver)};</script>\n` +
-  `<script src="legacy/polyfills.js"></script>\n<script src="legacy/boot.js"></script>`);
+  `<script src="legacy/boot.js"></script>\n<script src="legacy/polyfills.js"></script>`);
 html = html.replace(/<script src="web\.js[^"]*"><\/script>\s*/g, '');
 html = html.replace(/<link rel="manifest"[^>]*>\s*/g, '');
 fs.writeFileSync(path.join(OUT, 'index.html'), html);

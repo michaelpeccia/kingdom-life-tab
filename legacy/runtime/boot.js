@@ -83,6 +83,107 @@
   def(String.prototype, 'normalize', function () { return String(this); });
 })();
 
+/* --- IndexedDB: fill in getAllKeys, and fall back to memory if the old
+       WebView's database never answers (books then reinstall from the APK) --- */
+(function () {
+  var realIDB = null;
+  try { realIDB = window.indexedDB || window.webkitIndexedDB || null; } catch (e) {}
+  window.__KL_IDB = 'real';
+
+  function later(fn) { setTimeout(fn, 0); }
+
+  // getAllKeys arrived in Chrome 48; build it from a cursor
+  try {
+    var SP = window.IDBObjectStore && IDBObjectStore.prototype;
+    if (SP && !SP.getAllKeys) {
+      SP.getAllKeys = function () {
+        var out = { result: [], readyState: 'pending', error: null };
+        var c = this.openCursor();
+        c.onsuccess = function (e) {
+          var cur = e.target.result;
+          if (cur) { out.result.push(cur.key); cur['continue'](); }
+          else { out.readyState = 'done'; if (out.onsuccess) out.onsuccess({ target: out }); }
+        };
+        c.onerror = function () { out.error = c.error; if (out.onerror) out.onerror({ target: out }); };
+        return out;
+      };
+    }
+  } catch (e) {}
+
+  // ---- in-memory stand-in (only what app.js uses) ----
+  var mem = {};
+  function memReq(v) { return { result: v, readyState: 'done', error: null }; }
+  function MemStore(data) { this.d = data; }
+  MemStore.prototype.get = function (k) { return memReq(this.d.hasOwnProperty(k) ? this.d[k] : undefined); };
+  MemStore.prototype.put = function (v, k) { this.d[k] = v; return memReq(k); };
+  MemStore.prototype['delete'] = function (k) { delete this.d[k]; return memReq(undefined); };
+  MemStore.prototype.getAllKeys = function () { return memReq(Object.keys(this.d)); };
+  MemStore.prototype.getAll = function () { var d = this.d; return memReq(Object.keys(d).map(function (k) { return d[k]; })); };
+  MemStore.prototype.clear = function () { this.d = {}; return memReq(undefined); };
+  function MemDB(name) { this.name = name; this.s = mem[name] || (mem[name] = {}); this.objectStoreNames = { contains: function () { return true; } }; }
+  MemDB.prototype.createObjectStore = function (n) { this.s[n] = this.s[n] || {}; return new MemStore(this.s[n]); };
+  MemDB.prototype.transaction = function (n) {
+    var self = this, t = { error: null };
+    n = Array.isArray(n) ? n[0] : n;
+    t.objectStore = function (m) { self.s[m] = self.s[m] || {}; return new MemStore(self.s[m]); };
+    later(function () { if (t.oncomplete) t.oncomplete({ target: t }); });
+    return t;
+  };
+  MemDB.prototype.close = function () {};
+
+  function memOpen(name, req) {
+    window.__KL_IDB = 'memory';
+    var fresh = !mem[name];
+    var db = new MemDB(name);
+    req.result = db; req.readyState = 'done';
+    later(function () {
+      if (fresh && req.onupgradeneeded) req.onupgradeneeded({ target: req, oldVersion: 0 });
+      if (req.onsuccess) req.onsuccess({ target: req });
+    });
+  }
+
+  var useMemory = !realIDB;
+  var shim = {
+    open: function (name, version) {
+      var req = { result: null, error: null, readyState: 'pending' };
+      if (useMemory) { memOpen(name, req); return req; }
+      var done = false, r;
+      var fallback = function () { if (done) return; done = true; useMemory = true; memOpen(name, req); };
+      try { r = realIDB.open(name, version); } catch (e) { fallback(); return req; }
+      var timer = setTimeout(fallback, 4000);
+      r.onupgradeneeded = function (e) {
+        if (done) return;
+        req.result = r.result; req.transaction = r.transaction;
+        if (req.onupgradeneeded) req.onupgradeneeded(e);
+      };
+      r.onsuccess = function () {
+        if (done) { try { r.result.close(); } catch (e) {} return; }
+        done = true; clearTimeout(timer);
+        req.result = r.result; req.readyState = 'done';
+        if (req.onsuccess) req.onsuccess({ target: req });
+      };
+      r.onerror = function (e) { clearTimeout(timer); if (e && e.preventDefault) e.preventDefault(); fallback(); };
+      r.onblocked = function () { clearTimeout(timer); fallback(); };
+      return req;
+    },
+    deleteDatabase: function (n) { delete mem[n]; return realIDB && realIDB.deleteDatabase ? realIDB.deleteDatabase(n) : memReq(undefined); }
+  };
+  try { Object.defineProperty(window, 'indexedDB', { value: shim, configurable: true, writable: true }); }
+  catch (e) { try { window.indexedDB = shim; } catch (e2) {} }
+})();
+
+/* --- If startup is still on the loading screen after 25s, say where ------- */
+(function () {
+  setTimeout(function () {
+    var m = document.getElementById('boot-msg');
+    if (!m || !m.offsetParent) return;          // loading screen already gone
+    var msg = 'Still loading after 25 seconds.\nStuck at: "' + (m.textContent || '') + '"' +
+              '\nStorage: ' + (window.__KL_IDB || '?') + '   Build: ' + (window.__KL_VER || '?') +
+              '\n' + navigator.userAgent;
+    if (window.onerror) window.onerror(msg, 'boot-watchdog', 0, 0);
+  }, 25000);
+})();
+
 (function () {
   var d = document, root = d.documentElement, ver = window.__KL_VER || 'tab';
 
