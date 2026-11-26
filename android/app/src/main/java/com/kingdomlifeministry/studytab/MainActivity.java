@@ -52,6 +52,9 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
 
+        // Lets Chrome on a PC inspect the app over USB (chrome://inspect)
+        WebView.setWebContentsDebuggingEnabled(true);
+
         web = new WebView(this);
         setContentView(web);
 

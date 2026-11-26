@@ -75,3 +75,23 @@ of the error.
 - `android/` is a small WebView app that serves the bundled files as
   https://app.kingdom-life-ministry.com, so storage and links behave like the site.
 - To test the old-browser look on the PC, open the built site with `?legacy=1`.
+
+## Pushing a fix (PC, PowerShell)
+After files in this folder change, send them up and GitHub rebuilds the APK:
+
+```powershell
+cd $HOME\Downloads\kingdom-life-tab
+git add .
+git commit -m "Describe the fix here"
+git push
+```
+
+Then wait for the green check in Actions, download the new APK from Releases,
+and install it over the old one.
+
+## Seeing errors on the tablet
+- If something breaks, a red box at the bottom of the screen shows the error.
+  Take a photo of it and send it to me.
+- For more detail: plug the tablet into the PC by USB (USB debugging on),
+  open Chrome on the PC, go to chrome://inspect, and click "inspect" under
+  Kingdom Life Study to see its console.
