@@ -1,0 +1,67 @@
+name: Build tablet APK
+
+# Builds Kingdom Life Study for old Android tablets (4.4+) from the live web app.
+# Run it from the Actions tab ("Run workflow") after the web app changes.
+# It also runs by itself every Sunday night so the tablet APK stays current.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 3 * * 1'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get the live web app
+        run: |
+          git clone --depth 1 https://github.com/michaelpeccia/kingdom-life-study.git site
+          curl -sfL -o site/scripture-web.json \
+            https://raw.githubusercontent.com/michaelpeccia/kingdom-life-packs/main/scripture-web.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Convert it for old Android
+        run: |
+          cd legacy && npm ci && cd ..
+          node legacy/build.mjs site android/app/src/main/assets/www
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build the APK
+        run: |
+          cd android
+          gradle assembleRelease --no-daemon \
+            -PversionCode=${{ github.run_number }} \
+            -PversionName=1.${{ github.run_number }}
+          cp app/build/outputs/apk/release/app-release.apk \
+            ../KingdomLifeStudy-Tablet-1.${{ github.run_number }}.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KingdomLifeStudy-Tablet
+          path: KingdomLifeStudy-Tablet-*.apk
+
+      - name: Publish as a release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: tablet-1.${{ github.run_number }}
+          name: Kingdom Life Study Tablet 1.${{ github.run_number }}
+          body: Built from the live web app for Android 4.4 and newer tablets.
+          files: KingdomLifeStudy-Tablet-*.apk
+          make_latest: true

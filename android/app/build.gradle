@@ -1,0 +1,46 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.kingdomlifeministry.studytab'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.kingdomlifeministry.studytab'
+        minSdk 19            // Android 4.4 KitKat (Galaxy Tab 4)
+        targetSdk 34
+        versionCode Integer.parseInt((project.findProperty('versionCode') ?: '1').toString())
+        versionName((project.findProperty('versionName') ?: '1.0').toString())
+    }
+
+    signingConfigs {
+        release {
+            // Same key every build, so a new APK installs over the old one and
+            // keeps notes, highlights and installed books.
+            storeFile file('kl-tab.keystore')
+            storePassword 'kingdomlife'
+            keyAlias 'kltab'
+            keyPassword 'kingdomlife'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    // PDFs, mp3 and png are already compressed;
+    // storing them uncompressed lets AssetManager stream them.
+    androidResources { noCompress += ['pdf', 'mp3', 'png'] }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+}
